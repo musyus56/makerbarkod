@@ -487,11 +487,17 @@
             color: black !important;
         }
         
-        .data-info {
+        .sync-status {
             font-size: 12px;
-            color: #27ae60;
-            margin-top: 10px;
-            text-align: center;
+            margin-left: 10px;
+            padding: 3px 8px;
+            border-radius: 20px;
+            background-color: #27ae60;
+            color: white;
+        }
+        
+        .sync-status.offline {
+            background-color: #e74c3c;
         }
         
         @media print {
@@ -589,14 +595,66 @@
             background-color: #3498db;
             color: white;
         }
+        
+        .loading {
+            display: none;
+            text-align: center;
+            padding: 20px;
+            color: #3498db;
+        }
+        
+        .loading.active {
+            display: block;
+        }
     </style>
     <script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
     <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+    
+    <!-- Firebase SDK -->
+    <script type="module">
+        // Firebase imports
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/12.11.0/firebase-app.js";
+        import { getDatabase, ref, onValue, push, set, update, remove, query, orderByChild } from "https://www.gstatic.com/firebasejs/12.11.0/firebase-database.js";
+        
+        // Your web app's Firebase configuration
+        const firebaseConfig = {
+            apiKey: "AIzaSyDUbN0GvzTEyh1wVr1HJw0hXKn2ds6AV28",
+            authDomain: "makerbarkod.firebaseapp.com",
+            databaseURL: "https://makerbarkod-default-rtdb.firebaseio.com",
+            projectId: "makerbarkod",
+            storageBucket: "makerbarkod.firebasestorage.app",
+            messagingSenderId: "946896700071",
+            appId: "1:946896700071:web:5dc42e33b93e3d284d9182"
+        };
+        
+        // Initialize Firebase
+        const app = initializeApp(firebaseConfig);
+        const database = getDatabase(app);
+        const ordersRef = ref(database, 'orders');
+        
+        window.db = database;
+        window.ordersRef = ordersRef;
+        
+        // Bağlantı durumunu kontrol et
+        const connectedRef = ref(database, '.info/connected');
+        onValue(connectedRef, (snap) => {
+            const statusSpan = document.getElementById('syncStatus');
+            if (snap.val() === true) {
+                statusSpan.textContent = '✅ Senkronize';
+                statusSpan.className = 'sync-status';
+            } else {
+                statusSpan.textContent = '⚠️ Bağlantı Yok';
+                statusSpan.className = 'sync-status offline';
+            }
+        });
+        
+        window.firebaseReady = true;
+    </script>
 </head>
 <body>
     <header>
         <h1>🏪 Zebra Etiket - Teslim Sistemi</h1>
-        <p class="subtitle">QR Kod ile Sipariş Takip ve Teslim Onay Sistemi</p>
+        <p class="subtitle">QR Kod ile Sipariş Takip ve Teslim Onay Sistemi <span id="syncStatus" class="sync-status">🔄 Bağlanıyor...</span></p>
     </header>
     
     <!-- KAMERA BÖLÜMÜ - EN ÜSTTE -->
@@ -724,6 +782,8 @@ Lütfen formu doldurup
             <button class="filter-btn" data-filter="delivered">Teslim Edilen</button>
         </div>
         
+        <div class="loading" id="loadingIndicator">⏳ Yükleniyor...</div>
+        
         <div style="overflow-x: auto;">
             <table class="delivery-table" id="deliveryTable">
                 <thead>
@@ -739,12 +799,14 @@ Lütfen formu doldurup
                 </thead>
                 <tbody id="deliveryTableBody">
                     <tr>
-                        <td colspan="7" style="text-align: center;">Henüz sipariş yok</td>
+                        <td colspan="7" style="text-align: center;">Yükleniyor...</td>
                     </tr>
                 </tbody>
             </table>
         </div>
-        <div class="data-info">✅ Veriler tarayıcınızda kaydedilir (Local Storage)</div>
+        <div class="data-info" style="font-size: 12px; color: #7f8c8d; margin-top: 10px; text-align: center;">
+            📡 Veriler Firebase üzerinde senkronize edilir
+        </div>
     </div>
     
     <!-- Kamera Tarayıcı Modal -->
@@ -777,12 +839,12 @@ Lütfen formu doldurup
     </div>
     
     <footer>
-        <p>Zebra Etiket - QR Kod ile Sipariş Takip ve Teslim Onay Sistemi</p>
+        <p>Zebra Etiket - QR Kod ile Sipariş Takip ve Teslim Onay Sistemi (Firebase ile senkronize)</p>
     </footer>
     
-    <script>
-        // STORAGE KEY
-        const STORAGE_KEY = 'delivery_orders';
+    <script type="module">
+        // Firebase'den gelen fonksiyonları import et
+        import { getDatabase, ref, onValue, push, set, update, remove, query, orderByChild } from "https://www.gstatic.com/firebasejs/12.11.0/firebase-database.js";
         
         // Global değişkenler
         let orders = [];
@@ -791,6 +853,9 @@ Lütfen formu doldurup
         let currentOrderId = null;
         let html5QrCode = null;
         let lastCreatedOrder = null;
+        
+        const database = window.db;
+        const ordersRef = window.ordersRef;
         
         // Bip sesi
         function playBeep() {
@@ -811,39 +876,6 @@ Lütfen formu doldurup
             } catch(e) {}
         }
         
-        // Benzersiz ID oluştur
-        function generateId() {
-            return Date.now().toString(36) + Math.random().toString(36).substr(2);
-        }
-        
-        // Verileri kaydet
-        function saveOrders() {
-            localStorage.setItem(STORAGE_KEY, JSON.stringify(orders));
-        }
-        
-        // Verileri yükle
-        function loadOrders() {
-            const saved = localStorage.getItem(STORAGE_KEY);
-            if (saved) {
-                orders = JSON.parse(saved);
-            } else {
-                // Demo sipariş ekle
-                orders = [{
-                    id: generateId(),
-                    orderNumber: 'DEMO001',
-                    customerName: 'Ahmet Yılmaz',
-                    phoneNumber: '0555 123 45 67',
-                    email: 'ahmet@example.com',
-                    address: 'Caferağa Mah. Moda Cad. No:42 Kadıköy/İstanbul',
-                    deliveryType: 'Mağaza Teslim',
-                    productName: 'Sipariş Paketi',
-                    status: 'pending',
-                    createdAt: new Date().toISOString()
-                }];
-                saveOrders();
-            }
-        }
-        
         // QR kod oluştur
         function generateQRCode(elementId, link) {
             const container = document.getElementById(elementId);
@@ -861,6 +893,77 @@ Lütfen formu doldurup
                 } catch(e) {
                     container.innerHTML = '<div style="color: red;">QR kod oluşturulamadı</div>';
                 }
+            }
+        }
+        
+        // Firebase'den verileri dinle
+        function listenToFirebase() {
+            const loading = document.getElementById('loadingIndicator');
+            loading.classList.add('active');
+            
+            const ordersQuery = query(ref(database, 'orders'), orderByChild('createdAt'));
+            onValue(ordersQuery, (snapshot) => {
+                orders = [];
+                snapshot.forEach((childSnapshot) => {
+                    const order = childSnapshot.val();
+                    order.firebaseId = childSnapshot.key;
+                    orders.push(order);
+                });
+                // Tarihe göre sırala (en yeniler üstte)
+                orders.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+                renderDeliveryTable();
+                updateStats();
+                loading.classList.remove('active');
+            }, (error) => {
+                console.error("Firebase okuma hatası:", error);
+                loading.classList.remove('active');
+                document.getElementById('deliveryTableBody').innerHTML = '<tr><td colspan="7" style="text-align: center;">❌ Veriler yüklenemedi! İnternet bağlantınızı kontrol edin.</td></tr>';
+            });
+        }
+        
+        // Sipariş ekle
+        async function addOrderToFirebase(orderData) {
+            const newOrderRef = push(ref(database, 'orders'));
+            orderData.firebaseId = newOrderRef.key;
+            orderData.status = 'pending';
+            orderData.createdAt = new Date().toISOString();
+            await set(newOrderRef, orderData);
+            return orderData;
+        }
+        
+        // Sipariş güncelle
+        async function updateOrderInFirebase(orderId, updates) {
+            const orderRef = ref(database, `orders/${orderId}`);
+            await update(orderRef, updates);
+        }
+        
+        // Sipariş sil
+        async function deleteOrderFromFirebase(orderId) {
+            const orderRef = ref(database, `orders/${orderId}`);
+            await remove(orderRef);
+        }
+        
+        // Sipariş teslim et
+        async function confirmDeliver(orderId) {
+            const order = orders.find(o => o.firebaseId === orderId);
+            if (order && order.status === 'pending') {
+                await updateOrderInFirebase(orderId, { 
+                    status: 'delivered', 
+                    deliveredAt: new Date().toISOString() 
+                });
+                playBeep();
+                if (document.getElementById('infoModal').classList.contains('active')) {
+                    document.getElementById('infoModal').classList.remove('active');
+                }
+                alert('✅ Sipariş teslim edildi olarak işaretlendi!');
+            }
+        }
+        
+        // Sipariş sil (UI'dan)
+        async function deleteOrder(orderId) {
+            if (confirm('Bu siparişi silmek istediğinize emin misiniz?')) {
+                await deleteOrderFromFirebase(orderId);
+                playBeep();
             }
         }
         
@@ -903,13 +1006,13 @@ Lütfen formu doldurup
                     </td>
                     <td class="action-buttons">
                         ${order.status === 'pending' ? `
-                            <button class="btn btn-success small-btn" onclick="showOrderModal('${order.id}')">📱 Sorgula</button>
-                            <button class="btn btn-success small-btn" onclick="confirmDeliver('${order.id}')">✅ Teslim Et</button>
-                            <button class="btn btn-warning small-btn" onclick="reprintOrder('${order.id}')">🖨️ Tekrar Bas</button>
-                            <button class="btn btn-danger small-btn" onclick="deleteOrder('${order.id}')">🗑️ Sil</button>
+                            <button class="btn btn-success small-btn" onclick="window.showOrderModal('${order.firebaseId}')">📱 Sorgula</button>
+                            <button class="btn btn-success small-btn" onclick="window.confirmDeliver('${order.firebaseId}')">✅ Teslim Et</button>
+                            <button class="btn btn-warning small-btn" onclick="window.reprintOrder('${order.firebaseId}')">🖨️ Tekrar Bas</button>
+                            <button class="btn btn-danger small-btn" onclick="window.deleteOrder('${order.firebaseId}')">🗑️ Sil</button>
                         ` : `
-                            <button class="btn btn-warning small-btn" onclick="reprintOrder('${order.id}')">🖨️ Tekrar Bas</button>
-                            <button class="btn btn-danger small-btn" onclick="deleteOrder('${order.id}')">🗑️ Sil</button>
+                            <button class="btn btn-warning small-btn" onclick="window.reprintOrder('${order.firebaseId}')">🖨️ Tekrar Bas</button>
+                            <button class="btn btn-danger small-btn" onclick="window.deleteOrder('${order.firebaseId}')">🗑️ Sil</button>
                         `}
                     </td>
                 </tr>
@@ -927,58 +1030,11 @@ Lütfen formu doldurup
         
         // Sipariş bul
         function findOrderById(orderId) {
-            return orders.find(o => o.id === orderId);
+            return orders.find(o => o.firebaseId === orderId);
         }
         
         function findOrderByOrderNumber(orderNumber) {
             return orders.find(o => o.orderNumber === orderNumber);
-        }
-        
-        // Sipariş ekle
-        function addOrder(orderData) {
-            orderData.id = generateId();
-            orderData.status = 'pending';
-            orderData.createdAt = new Date().toISOString();
-            orders.unshift(orderData);
-            saveOrders();
-            renderDeliveryTable();
-            updateStats();
-            return orderData;
-        }
-        
-        // Sipariş teslim et
-        function confirmDeliver(orderId) {
-            const order = findOrderById(orderId);
-            if (order && order.status === 'pending') {
-                order.status = 'delivered';
-                order.deliveredAt = new Date().toISOString();
-                saveOrders();
-                renderDeliveryTable();
-                updateStats();
-                playBeep();
-                if (document.getElementById('infoModal').classList.contains('active')) {
-                    document.getElementById('infoModal').classList.remove('active');
-                }
-                alert('✅ Sipariş teslim edildi olarak işaretlendi!');
-                return true;
-            }
-            return false;
-        }
-        
-        // Sipariş sil
-        function deleteOrder(orderId) {
-            if (confirm('Bu siparişi silmek istediğinize emin misiniz?')) {
-                const index = orders.findIndex(o => o.id === orderId);
-                if (index !== -1) {
-                    orders.splice(index, 1);
-                    saveOrders();
-                    renderDeliveryTable();
-                    updateStats();
-                    playBeep();
-                    return true;
-                }
-            }
-            return false;
         }
         
         // Barkodu tekrar bas
@@ -1022,7 +1078,7 @@ Lütfen formu doldurup
                 const order = findOrderByOrderNumber(orderNumber);
                 if (order) {
                     playBeep();
-                    showOrderModal(order.id);
+                    showOrderModal(order.firebaseId);
                 } else {
                     alert('❌ Sipariş bulunamadı! Sipariş numarası: ' + orderNumber);
                 }
@@ -1072,7 +1128,7 @@ Lütfen formu doldurup
         }
         
         // Yeni sipariş oluştur
-        function generateLabel() {
+        async function generateLabel() {
             const orderNumber = document.getElementById('orderNumber').value;
             const customerName = document.getElementById('customerName').value;
             const phoneNumber = document.getElementById('phoneNumber').value;
@@ -1096,32 +1152,42 @@ Lütfen formu doldurup
                 productName
             };
             
-            const savedOrder = addOrder(orderData);
-            lastCreatedOrder = savedOrder;
+            const loading = document.getElementById('loadingIndicator');
+            loading.classList.add('active');
             
-            let previewText = 'SİPARİŞ ETİKETİ\n';
-            previewText += '====================\n';
-            previewText += `Sipariş No: ${orderNumber}\n`;
-            previewText += `Alıcı: ${customerName}\n`;
-            previewText += `Telefon: ${phoneNumber}\n`;
-            previewText += `E-posta: ${email}\n`;
-            previewText += `Adres: ${address}\n\n`;
-            previewText += `Teslim Türü: ${deliveryType}\n`;
-            previewText += `Ürün: ${productName || '-'}`;
-            
-            document.getElementById('labelContent').textContent = previewText;
-            generateQRCode('qrcodePreview', orderNumber);
-            createPrintLabel(orderData, orderNumber);
-            generateZPL(orderData, orderNumber);
-            
-            document.getElementById('orderNumber').value = '';
-            document.getElementById('customerName').value = '';
-            document.getElementById('phoneNumber').value = '';
-            document.getElementById('email').value = '';
-            document.getElementById('address').value = '';
-            document.getElementById('productName').value = '';
-            
-            alert('✅ Sipariş başarıyla oluşturuldu ve listeye eklendi!');
+            try {
+                const savedOrder = await addOrderToFirebase(orderData);
+                lastCreatedOrder = savedOrder;
+                
+                let previewText = 'SİPARİŞ ETİKETİ\n';
+                previewText += '====================\n';
+                previewText += `Sipariş No: ${orderNumber}\n`;
+                previewText += `Alıcı: ${customerName}\n`;
+                previewText += `Telefon: ${phoneNumber}\n`;
+                previewText += `E-posta: ${email}\n`;
+                previewText += `Adres: ${address}\n\n`;
+                previewText += `Teslim Türü: ${deliveryType}\n`;
+                previewText += `Ürün: ${productName || '-'}`;
+                
+                document.getElementById('labelContent').textContent = previewText;
+                generateQRCode('qrcodePreview', orderNumber);
+                createPrintLabel(orderData, orderNumber);
+                generateZPL(orderData, orderNumber);
+                
+                document.getElementById('orderNumber').value = '';
+                document.getElementById('customerName').value = '';
+                document.getElementById('phoneNumber').value = '';
+                document.getElementById('email').value = '';
+                document.getElementById('address').value = '';
+                document.getElementById('productName').value = '';
+                
+                alert('✅ Sipariş başarıyla oluşturuldu ve Firebase\'e kaydedildi!');
+            } catch (error) {
+                console.error("Kayıt hatası:", error);
+                alert('❌ Kayıt hatası: ' + error.message);
+            } finally {
+                loading.classList.remove('active');
+            }
         }
         
         // Kamera tarayıcı
@@ -1227,28 +1293,28 @@ Lütfen formu doldurup
             });
         });
         
-        // Başlangıç
-        loadOrders();
-        renderDeliveryTable();
-        updateStats();
+        // Firebase'den verileri dinlemeye başla
+        listenToFirebase();
         
-        if (orders.length > 0) {
-            lastCreatedOrder = orders[0];
-            generateQRCode('qrcodePreview', orders[0].orderNumber);
-            createPrintLabel(orders[0], orders[0].orderNumber);
-            generateZPL(orders[0], orders[0].orderNumber);
-            
-            let previewText = 'SİPARİŞ ETİKETİ\n';
-            previewText += '====================\n';
-            previewText += `Sipariş No: ${orders[0].orderNumber}\n`;
-            previewText += `Alıcı: ${orders[0].customerName}\n`;
-            previewText += `Telefon: ${orders[0].phoneNumber}\n`;
-            previewText += `E-posta: ${orders[0].email || ''}\n`;
-            previewText += `Adres: ${orders[0].address}\n\n`;
-            previewText += `Teslim Türü: ${orders[0].deliveryType}\n`;
-            previewText += `Ürün: ${orders[0].productName || '-'}`;
-            document.getElementById('labelContent').textContent = previewText;
-        }
+        // Demo sipariş yoksa ekle (ilk açılışta)
+        setTimeout(() => {
+            if (orders.length === 0) {
+                const demoOrder = {
+                    orderNumber: 'DEMO001',
+                    customerName: 'Ahmet Yılmaz',
+                    phoneNumber: '0555 123 45 67',
+                    email: 'ahmet@example.com',
+                    address: 'Caferağa Mah. Moda Cad. No:42 Kadıköy/İstanbul',
+                    deliveryType: 'Mağaza Teslim',
+                    productName: 'Sipariş Paketi',
+                    status: 'pending',
+                    createdAt: new Date().toISOString()
+                };
+                addOrderToFirebase(demoOrder).then(() => {
+                    console.log('Demo sipariş eklendi');
+                });
+            }
+        }, 2000);
     </script>
 </body>
 </html>
