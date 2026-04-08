@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
-    <title>Zebra Etiket - Teslim Sistemi</title>
+    <title>Zebra Etiket - Teslim Sistemi | 40x40 mm Etiket</title>
     <style>
         * {
             box-sizing: border-box;
@@ -653,7 +653,7 @@
 </head>
 <body>
     <header>
-        <h1>🏪 Zebra Etiket - Teslim Sistemi</h1>
+        <h1>🏪 Zebra Etiket - Teslim Sistemi (40x40 mm)</h1>
         <p class="subtitle">QR Kod ile Sipariş Takip ve Teslim Onay Sistemi <span id="syncStatus" class="sync-status">🔄 Bağlanıyor...</span></p>
     </header>
     
@@ -748,7 +748,7 @@ Lütfen formu doldurup
             </div>
             <p class="label-info">Etiket önizlemesi - QR kod sipariş numarasını içerir</p>
             
-            <h3 class="section-title">📟 ZPL Kodu</h3>
+            <h3 class="section-title">📟 ZPL Kodu (40x40 mm)</h3>
             <div class="zpl-output" id="zplOutput"></div>
         </section>
     </div>
@@ -806,7 +806,7 @@ Lütfen formu doldurup
             </table>
         </div>
         <div class="data-info" style="font-size: 12px; color: #7f8c8d; margin-top: 10px; text-align: center;">
-            📡 Veriler Firebase üzerinde senkronize edilir
+            📡 Veriler Firebase üzerinde senkronize edilir | 🏷️ Etiket boyutu: 40x40 mm
         </div>
     </div>
     
@@ -840,7 +840,7 @@ Lütfen formu doldurup
     </div>
     
     <footer>
-        <p>Zebra Etiket - QR Kod ile Sipariş Takip ve Teslim Onay Sistemi (Firebase ile senkronize)</p>
+        <p>Zebra Etiket - 40x40 mm Termal Etiket için Özel ZPL Kodu ile QR Kod Sipariş Takip ve Teslim Onay Sistemi</p>
     </footer>
     
     <script type="module">
@@ -1119,24 +1119,25 @@ Lütfen formu doldurup
             let zplCode = `^XA\n`;
             // 40x40 mm etiket boyutu
             zplCode += `^LL320^PW320\n`;
-            zplCode += `^CF0,16\n`;
             
-            // Sipariş No (üstte)
-            zplCode += `^FO5,2^A0N,18,18^FDSip:${order.orderNumber}^FS\n`;
-            // Alıcı
-            let customerName = order.customerName.length > 18 ? order.customerName.substring(0, 16) : order.customerName;
-            zplCode += `^FO5,22^A0N,14,14^FD${customerName}^FS\n`;
+            // SOL TARAF - BİLGİLER (tek sayfaya sığacak şekilde küçültülmüş)
+            // Sipariş No
+            let orderNo = order.orderNumber.length > 14 ? order.orderNumber.substring(0, 12) : order.orderNumber;
+            zplCode += `^FO3,2^A0N,14,14^FDSip:${orderNo}^FS\n`;
+            // Alıcı (kısalt)
+            let customerName = order.customerName.length > 16 ? order.customerName.substring(0, 14) : order.customerName;
+            zplCode += `^FO3,18^A0N,11,11^FD${customerName}^FS\n`;
             // Telefon
-            zplCode += `^FO5,40^A0N,12,12^FD${order.phoneNumber}^FS\n`;
-            // Teslim Türü
-            let deliveryType = order.deliveryType.length > 20 ? order.deliveryType.substring(0, 18) : order.deliveryType;
-            zplCode += `^FO5,56^A0N,10,10^FD${deliveryType}^FS\n`;
-            // Ürün
+            zplCode += `^FO3,32^A0N,10,10^FD${order.phoneNumber}^FS\n`;
+            // Teslim Türü (kısalt)
+            let deliveryType = order.deliveryType.length > 18 ? order.deliveryType.substring(0, 16) : order.deliveryType;
+            zplCode += `^FO3,45^A0N,9,9^FD${deliveryType}^FS\n`;
+            // Ürün (kısalt)
             let product = order.productName && order.productName.length > 0 ? (order.productName.length > 18 ? order.productName.substring(0, 16) : order.productName) : '-';
-            zplCode += `^FO5,70^A0N,10,10^FD${product}^FS\n`;
+            zplCode += `^FO3,57^A0N,9,9^FD${product}^FS\n`;
             
-            // QR BARKOD - 40mm etiket için (modül 4, yükseklik 4)
-            zplCode += `^FO170,5^BQN,4,4^FDMA,${qrLink}^FS\n`;
+            // SAĞ TARAF - QR BARKOD (3x3 boyutunda, tek sayfada kalacak)
+            zplCode += `^FO230,2^BQN,3,3^FDMA,${qrLink}^FS\n`;
             
             zplCode += `^XZ`;
             document.getElementById('zplOutput').textContent = zplCode;
