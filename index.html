@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
-    <title>Zebra Etiket - Teslim Sistemi | 4x4 inç Etiket</title>
+    <title>Zebra Etiket - Teslim Sistemi</title>
     <style>
         * {
             box-sizing: border-box;
@@ -653,7 +653,7 @@
 </head>
 <body>
     <header>
-        <h1>🏪 Zebra Etiket - Teslim Sistemi (4x4 inç)</h1>
+        <h1>🏪 Zebra Etiket - Teslim Sistemi</h1>
         <p class="subtitle">QR Kod ile Sipariş Takip ve Teslim Onay Sistemi <span id="syncStatus" class="sync-status">🔄 Bağlanıyor...</span></p>
     </header>
     
@@ -748,7 +748,7 @@ Lütfen formu doldurup
             </div>
             <p class="label-info">Etiket önizlemesi - QR kod sipariş numarasını içerir</p>
             
-            <h3 class="section-title">📟 ZPL Kodu (4x4 inç)</h3>
+            <h3 class="section-title">📟 ZPL Kodu</h3>
             <div class="zpl-output" id="zplOutput"></div>
         </section>
     </div>
@@ -806,7 +806,7 @@ Lütfen formu doldurup
             </table>
         </div>
         <div class="data-info" style="font-size: 12px; color: #7f8c8d; margin-top: 10px; text-align: center;">
-            📡 Veriler Firebase üzerinde senkronize edilir | 🏷️ Etiket boyutu: 4x4 inç (203 DPI)
+            📡 Veriler Firebase üzerinde senkronize edilir
         </div>
     </div>
     
@@ -840,7 +840,7 @@ Lütfen formu doldurup
     </div>
     
     <footer>
-        <p>Zebra Etiket - 4x4 inç Termal Etiket için Özel ZPL Kodu ile QR Kod Sipariş Takip ve Teslim Onay Sistemi</p>
+        <p>Zebra Etiket - QR Kod ile Sipariş Takip ve Teslim Onay Sistemi (Firebase ile senkronize)</p>
     </footer>
     
     <script type="module">
@@ -1113,48 +1113,30 @@ Lütfen formu doldurup
             document.getElementById('printLabelContent').innerHTML = printHTML;
         }
         
-        // 4x4 inç termal etiket için ZPL üretimi (203 DPI)
-        // 4 inç = 812 nokta (203 * 4 = 812)
+        // 40mm x 40mm termal etiket için ZPL üretimi (203 DPI)
+        // 40mm = 320 nokta (203 DPI * (40/25.4) = 320)
         function generateZPL(order, qrLink) {
             let zplCode = `^XA\n`;
-            // 4x4 inç etiket boyutu
-            zplCode += `^LL812^PW812\n`;
-            zplCode += `^CF0,30\n`;
+            // 40x40 mm etiket boyutu
+            zplCode += `^LL320^PW320\n`;
+            zplCode += `^CF0,16\n`;
             
-            // Başlık - ortalanmış, büyük punto
-            zplCode += `^FO200,20^A0N,45,45^FDSİPARİŞ ETİKETİ^FS\n`;
-            // Sipariş No
-            zplCode += `^FO20,80^A0N,35,35^FDSipariş No: ${order.orderNumber}^FS\n`;
+            // Sipariş No (üstte)
+            zplCode += `^FO5,2^A0N,18,18^FDSip:${order.orderNumber}^FS\n`;
             // Alıcı
-            zplCode += `^FO20,130^A0N,35,35^FDAlıcı: ${order.customerName}^FS\n`;
+            let customerName = order.customerName.length > 18 ? order.customerName.substring(0, 16) : order.customerName;
+            zplCode += `^FO5,22^A0N,14,14^FD${customerName}^FS\n`;
             // Telefon
-            zplCode += `^FO20,180^A0N,35,35^FDTelefon: ${order.phoneNumber}^FS\n`;
-            // E-posta
-            let emailText = order.email && order.email !== '' ? order.email : '-';
-            zplCode += `^FO20,230^A0N,30,30^FDE-posta: ${emailText}^FS\n`;
+            zplCode += `^FO5,40^A0N,12,12^FD${order.phoneNumber}^FS\n`;
+            // Teslim Türü
+            let deliveryType = order.deliveryType.length > 20 ? order.deliveryType.substring(0, 18) : order.deliveryType;
+            zplCode += `^FO5,56^A0N,10,10^FD${deliveryType}^FS\n`;
+            // Ürün
+            let product = order.productName && order.productName.length > 0 ? (order.productName.length > 18 ? order.productName.substring(0, 16) : order.productName) : '-';
+            zplCode += `^FO5,70^A0N,10,10^FD${product}^FS\n`;
             
-            // Adres - 2 satır olabilir
-            let addressLine1 = order.address.substring(0, 38);
-            let addressLine2 = order.address.length > 38 ? order.address.substring(38, 76) : '';
-            zplCode += `^FO20,280^A0N,28,28^FDAdres: ${addressLine1}^FS\n`;
-            if (addressLine2) {
-                zplCode += `^FO65,315^A0N,28,28^FD${addressLine2}^FS\n`;
-            }
-            
-            // Teslim Türü ve Ürün pozisyonu
-            let yPos = addressLine2 ? 365 : 335;
-            zplCode += `^FO20,${yPos}^A0N,32,32^FDTeslim: ${order.deliveryType}^FS\n`;
-            yPos += 50;
-            zplCode += `^FO20,${yPos}^A0N,32,32^FDÜrün: ${order.productName || '-'}^FS\n`;
-            
-            // QR BARKOD - 4x4 etiket için BÜYÜK BOYUT (modül 12, yükseklik 12)
-            // Barkodu etiketin ortasına yakın bir konuma yerleştir
-            yPos += 75;
-            zplCode += `^FO100,${yPos}^BQN,12,12^FDMA,${qrLink}^FS\n`;
-            
-            // Sipariş numarası barkodun altında
-            yPos += 155;
-            zplCode += `^FO150,${yPos}^A0N,30,30^FD${order.orderNumber}^FS\n`;
+            // QR BARKOD - 40mm etiket için (modül 4, yükseklik 4)
+            zplCode += `^FO170,5^BQN,4,4^FDMA,${qrLink}^FS\n`;
             
             zplCode += `^XZ`;
             document.getElementById('zplOutput').textContent = zplCode;
@@ -1260,7 +1242,7 @@ Lütfen formu doldurup
             const url = URL.createObjectURL(blob);
             const a = document.createElement('a');
             a.href = url;
-            a.download = `zebra_etiket_4x4_${Date.now()}.zpl`;
+            a.download = `zebra_etiket_40mm_${Date.now()}.zpl`;
             a.click();
             URL.revokeObjectURL(url);
         }
@@ -1333,7 +1315,7 @@ Lütfen formu doldurup
         setTimeout(() => {
             if (orders.length === 0) {
                 const demoOrder = {
-                    orderNumber: 'DEMO4X4',
+                    orderNumber: 'DEMO40MM',
                     customerName: 'Ahmet Yılmaz',
                     phoneNumber: '0555 123 45 67',
                     email: 'ahmet@example.com',
