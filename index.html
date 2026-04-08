@@ -1123,7 +1123,8 @@ Lütfen formu doldurup
             zplCode += `^FO20,195^A0N,25,25^FDAdres: ${order.address.substring(0, 30)}^FS\n`;
             zplCode += `^FO20,230^A0N,25,25^FDTeslim Türü: ${order.deliveryType}^FS\n`;
             zplCode += `^FO20,265^A0N,25,25^FDÜrün: ${order.productName || '-'}^FS\n`;
-            zplCode += `^FO20,300^BQN,2,10^FDMA,${qrLink}^FS\n`;
+            // Barkod 4x4 boyutunda - modül genişliği 4, barkod yüksekliği 4 (daha okunabilir)
+            zplCode += `^FO20,300^BQN,4,4^FDMA,${qrLink}^FS\n`;
             zplCode += `^XZ`;
             document.getElementById('zplOutput').textContent = zplCode;
         }
