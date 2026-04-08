@@ -1113,18 +1113,37 @@ Lütfen formu doldurup
             document.getElementById('printLabelContent').innerHTML = printHTML;
         }
         
+        // 4x4 inç termal etiket için ZPL üretimi (203 DPI)
         function generateZPL(order, qrLink) {
             let zplCode = `^XA\n`;
-            zplCode += `^FO20,20^A0N,30,30^FDSİPARİŞ ETİKETİ^FS\n`;
-            zplCode += `^FO20,55^A0N,25,25^FDSipariş No: ${order.orderNumber}^FS\n`;
-            zplCode += `^FO20,90^A0N,25,25^FDAlıcı: ${order.customerName}^FS\n`;
-            zplCode += `^FO20,125^A0N,25,25^FDTelefon: ${order.phoneNumber}^FS\n`;
-            zplCode += `^FO20,160^A0N,25,25^FDE-posta: ${order.email || '-'}^FS\n`;
-            zplCode += `^FO20,195^A0N,25,25^FDAdres: ${order.address.substring(0, 30)}^FS\n`;
-            zplCode += `^FO20,230^A0N,25,25^FDTeslim Türü: ${order.deliveryType}^FS\n`;
-            zplCode += `^FO20,265^A0N,25,25^FDÜrün: ${order.productName || '-'}^FS\n`;
-            // Barkod 4x4 boyutunda - modül genişliği 4, barkod yüksekliği 4 (daha okunabilir)
-            zplCode += `^FO20,300^BQN,4,4^FDMA,${qrLink}^FS\n`;
+            // 4x4 inç = 812 nokta (203 DPI için 4*203=812)
+            zplCode += `^LL812^PW812\n`;
+            // Başlık - büyük punto
+            zplCode += `^FO20,20^A0N,40,40^FDSİPARİŞ ETİKETİ^FS\n`;
+            // Sipariş No
+            zplCode += `^FO20,75^A0N,30,30^FDSipariş No: ${order.orderNumber}^FS\n`;
+            // Alıcı
+            zplCode += `^FO20,120^A0N,30,30^FDAlıcı: ${order.customerName}^FS\n`;
+            // Telefon
+            zplCode += `^FO20,165^A0N,30,30^FDTelefon: ${order.phoneNumber}^FS\n`;
+            // E-posta
+            zplCode += `^FO20,210^A0N,28,28^FDE-posta: ${order.email || '-'}^FS\n`;
+            // Adres (2 satır olabilir)
+            let addressLine1 = order.address.substring(0, 35);
+            let addressLine2 = order.address.length > 35 ? order.address.substring(35, 70) : '';
+            zplCode += `^FO20,255^A0N,26,26^FDAdres: ${addressLine1}^FS\n`;
+            if (addressLine2) {
+                zplCode += `^FO20,290^A0N,26,26^FD        ${addressLine2}^FS\n`;
+            }
+            // Teslim Türü
+            let yPos = addressLine2 ? 330 : 300;
+            zplCode += `^FO20,${yPos}^A0N,28,28^FDTeslim Türü: ${order.deliveryType}^FS\n`;
+            // Ürün
+            yPos = addressLine2 ? yPos + 45 : yPos + 45;
+            zplCode += `^FO20,${yPos}^A0N,28,28^FDÜrün: ${order.productName || '-'}^FS\n`;
+            // QR Barkod - 4x4 inç etiket için büyük boyut (modül genişliği 8, yükseklik 8)
+            yPos = yPos + 50;
+            zplCode += `^FO20,${yPos}^BQN,8,8^FDMA,${qrLink}^FS\n`;
             zplCode += `^XZ`;
             document.getElementById('zplOutput').textContent = zplCode;
         }
@@ -1229,7 +1248,7 @@ Lütfen formu doldurup
             const url = URL.createObjectURL(blob);
             const a = document.createElement('a');
             a.href = url;
-            a.download = `zebra_etiket_${Date.now()}.zpl`;
+            a.download = `zebra_etiket_4x4_${Date.now()}.zpl`;
             a.click();
             URL.revokeObjectURL(url);
         }
