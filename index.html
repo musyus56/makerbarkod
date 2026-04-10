@@ -1114,29 +1114,24 @@ Lütfen formu doldurup
         }
         
         // 40mm x 40mm termal etiket için ZPL üretimi (203 DPI)
-        // 40mm = 320 nokta (203 DPI * (40/25.4) = 320)
         function generateZPL(order, qrLink) {
             let zplCode = `^XA\n`;
-            // 40x40 mm etiket boyutu
             zplCode += `^LL320^PW320\n`;
             
-            // SOL TARAF - BİLGİLER (tek sayfaya sığacak şekilde küçültülmüş)
-            // Sipariş No
             let orderNo = order.orderNumber.length > 14 ? order.orderNumber.substring(0, 12) : order.orderNumber;
             zplCode += `^FO3,2^A0N,14,14^FDSip:${orderNo}^FS\n`;
-            // Alıcı (kısalt)
+            
             let customerName = order.customerName.length > 16 ? order.customerName.substring(0, 14) : order.customerName;
             zplCode += `^FO3,18^A0N,11,11^FD${customerName}^FS\n`;
-            // Telefon
+            
             zplCode += `^FO3,32^A0N,10,10^FD${order.phoneNumber}^FS\n`;
-            // Teslim Türü (kısalt)
+            
             let deliveryType = order.deliveryType.length > 18 ? order.deliveryType.substring(0, 16) : order.deliveryType;
             zplCode += `^FO3,45^A0N,9,9^FD${deliveryType}^FS\n`;
-            // Ürün (kısalt)
+            
             let product = order.productName && order.productName.length > 0 ? (order.productName.length > 18 ? order.productName.substring(0, 16) : order.productName) : '-';
             zplCode += `^FO3,57^A0N,9,9^FD${product}^FS\n`;
             
-            // SAĞ TARAF - QR BARKOD (3x3 boyutunda, tek sayfada kalacak)
             zplCode += `^FO230,2^BQN,3,3^FDMA,${qrLink}^FS\n`;
             
             zplCode += `^XZ`;
@@ -1206,35 +1201,60 @@ Lütfen formu doldurup
             }
         }
         
-        // Kamera tarayıcı
+        // Kamera tarayıcı - DÜZELTİLDİ
         async function startScanner() {
-            document.getElementById('scannerModal').classList.add('active');
+            const modal = document.getElementById('scannerModal');
+            modal.classList.add('active');
+            
             try {
+                // Eğer zaten bir tarayıcı varsa temizle
+                if (html5QrCode) {
+                    try {
+                        await html5QrCode.stop();
+                        await html5QrCode.clear();
+                    } catch(e) {}
+                }
+                
                 html5QrCode = new Html5Qrcode("qr-reader");
+                
+                const config = {
+                    fps: 10,
+                    qrbox: { width: 250, height: 250 },
+                    aspectRatio: 1.0
+                };
+                
                 await html5QrCode.start(
                     { facingMode: "environment" },
-                    { fps: 10, qrbox: { width: 250, height: 250 } },
+                    config,
                     (decodedText) => {
+                        // QR kod okundu
+                        console.log("QR okundu:", decodedText);
                         searchByQRCode(decodedText);
                         stopScanner();
                     },
-                    () => {}
+                    (errorMessage) => {
+                        // Hata mesajlarını gösterme (sürekli log doldurmasın)
+                        // console.log(errorMessage);
+                    }
                 );
             } catch(err) {
-                alert('Kamera başlatılamadı: ' + err.message);
+                console.error("Kamera hatası:", err);
+                alert('Kamera başlatılamadı! Lütfen kamera izni verin ve sayfayı yenileyin.\nHata: ' + err.message);
                 stopScanner();
             }
         }
         
         function stopScanner() {
-            if (html5QrCode && html5QrCode.isScanning) {
-                html5QrCode.stop().then(() => {
-                    html5QrCode.clear();
-                    document.getElementById('scannerModal').classList.remove('active');
-                }).catch(() => {});
-            } else {
-                document.getElementById('scannerModal').classList.remove('active');
+            if (html5QrCode) {
+                try {
+                    if (html5QrCode.isScanning) {
+                        html5QrCode.stop().then(() => {
+                            html5QrCode.clear();
+                        }).catch(() => {});
+                    }
+                } catch(e) {}
             }
+            document.getElementById('scannerModal').classList.remove('active');
         }
         
         function downloadZPL() {
